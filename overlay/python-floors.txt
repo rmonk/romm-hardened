@@ -1,0 +1,18 @@
+# Python packages in romm's venv raised to a minimum ("floor") version.
+#
+# Format: <name> <minimum> <cap>   (cap is exclusive: stay below it)
+# A floor only ever raises a version. When upstream ships the floor or newer, the line
+# becomes a no-op (the build log says so): delete it then. Everything not listed stays at
+# exactly the version upstream shipped (frozen from the venv as constraints).
+#
+# authlib: CVE-2026-96760 (critical, JWS signature bypass) and 3 HIGH. Used for OIDC login.
+# Upstream master moved from ~=1.8.0 to ~=1.9.1 for the same fix.
+authlib     1.9.1   1.10
+# dnspython (via email-validator): 2 HIGH, fixed in 2.9.0 and 2.9.2.
+dnspython   2.9.2   3
+# oauthlib (via requests-oauthlib, used by some apprise notifiers): 2 HIGH, fixed in 4.0.x.
+# requests-oauthlib 2.0.0 accepts oauthlib>=3.0.0.
+oauthlib    4.0.1   5
+# joserfc (used by authlib and romm's own JWT code): CVE-2026-119284 (MEDIUM), fixed in 1.7.6,
+# inside romm's own `~= 1.7.5` pin.
+joserfc     1.7.6   1.8
