@@ -86,3 +86,8 @@ LABEL org.opencontainers.image.version=$HARDENED_VERSION \
       org.romm-hardened.source=$HARDENED_SOURCE \
       org.romm-hardened.upstream-version=$UPSTREAM_VERSION \
       org.romm-hardened.upstream-digest=$UPSTREAM_DIGEST
+
+# Upstream's image has no health check. /api/heartbeat goes through nginx to the backend, so it
+# covers the whole stack; the start period allows for the migrations on first start.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
+  CMD curl -fsS -o /dev/null http://127.0.0.1:8080/api/heartbeat || exit 1
