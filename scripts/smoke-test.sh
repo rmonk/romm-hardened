@@ -6,6 +6,7 @@
 #   * the raised Python packages are in place, pip is gone, deps are consistent
 #   * upstream's ScreenScraper developer credentials are still set (not printed)
 #   * a restart with the same volumes keeps the user
+#   * it also starts as a non-root user with no capabilities (fresh volumes)
 #
 # Usage: scripts/smoke-test.sh <image>      (DOCKER=podman to use podman; needs curl + jq)
 set -euo pipefail
@@ -28,7 +29,7 @@ cleanup() {
   rc=$?
   if [ $rc -ne 0 ]; then echo "--- romm logs ---"; $docker logs --tail 80 "$name" 2>&1 || true; fi
   $docker rm -f "$name" "$db" >/dev/null 2>&1 || true
-  $docker volume rm -f "$name-db" "$name-romm" "$name-redis" >/dev/null 2>&1 || true
+  $docker volume rm -f "$name-db" "$name-romm" "$name-redis" "$name-nr-romm" "$name-nr-redis" >/dev/null 2>&1 || true
   $docker network rm "$net" >/dev/null 2>&1 || true
   rm -f "$jar"
   exit $rc
@@ -49,8 +50,9 @@ done
 $docker exec "$db" healthcheck.sh --connect --innodb_initialized >/dev/null 2>&1 || fail "MariaDB not ready"
 
 start() {
-  $docker run -d --name "$name" --network "$net" -p "127.0.0.1:$port:8080" \
-    -v "$name-romm:/romm" -v "$name-redis:/redis-data" \
+  local vols="${1:-$name}"; shift || true
+  $docker run -d --name "$name" --network "$net" -p "127.0.0.1:$port:8080" "$@" \
+    -v "$vols-romm:/romm" -v "$vols-redis:/redis-data" \
     -e DB_HOST="$db" -e DB_NAME=romm -e DB_USER=romm-user -e DB_PASSWD="$dbpass" \
     -e ROMM_AUTH_SECRET_KEY="$secret" "$image" >/dev/null
   echo "smoke: waiting for romm"
@@ -118,4 +120,11 @@ hc="$($docker image inspect --format '{{json .Config.Healthcheck}}' "$image" \
 [ -n "$hc" ] || { echo "smoke: FAIL the image has no health check"; exit 1; }
 eval "$docker exec \"$name\" $hc" >/dev/null || { echo "smoke: FAIL the image's health check fails"; exit 1; }
 echo "smoke: image health check passes"
+
+# Non-root: the image's romm user (named volumes start out owned by it), no capabilities.
+$docker rm -f "$name" >/dev/null
+start "$name-nr" --user 1000:1000 --cap-drop ALL --security-opt no-new-privileges
+$docker exec "$name" sh -c 'nginx -T 2>/dev/null | grep -q "listen 8080"' || fail "non-root: romm's nginx config not rendered"
+grep -qE 'Traceback|emerg' <<<"$($docker logs "$name" 2>&1)" && fail "non-root: errors in logs"
+echo "smoke: non-root start with no capabilities OK"
 echo "smoke: PASS"

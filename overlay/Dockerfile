@@ -15,6 +15,8 @@
 #     everything else held at upstream's versions; binary wheels only
 #   * system pip removed (the app runs from the uv venv, which has no pip); this also
 #     drops pip's vendored msgpack/setuptools/urllib3
+#   * nginx.org's conf.d/default.conf removed (the entrypoint writes romm's there), so the image
+#     also runs as a non-root user
 # Entrypoint, CMD, ENV, VOLUME, user and layout are inherited unchanged.
 
 ARG UPSTREAM_IMAGE
@@ -37,6 +39,10 @@ RUN set -eux; \
     nginx_pkgs="$(apk info | grep -E '^nginx(-module-.+)?$' | sed 's/$/@nginx/')"; \
     test -n "$nginx_pkgs"; \
     apk add --no-cache --upgrade $nginx_pkgs; \
+    # nginx.org's package puts back its own conf.d/default.conf (root 644, listen 80). Upstream
+    # ships that path world-writable because the entrypoint renders romm's config over it at
+    # every start; as root 644 a non-root container can't, and nginx falls back to port 80.
+    rm -f /etc/nginx/conf.d/default.conf; \
     apk upgrade --no-cache; \
     apk version -l '<' | tee /tmp/apk-outdated; \
     [ "$(wc -l < /tmp/apk-outdated)" -le 1 ]; \
